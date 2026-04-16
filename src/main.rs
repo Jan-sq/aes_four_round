@@ -1,30 +1,54 @@
 fn main() {
-    let aes_key: [u8; 16] = *b"hinterherdackeln";
+    let mut aes_key: [u8; 16] = *b"hinterherdackeln";
     let aes_message: [u8; 16] = *b"Querstromturbine";
-    encrypt(&aes_key, &aes_message);
+    encrypt(&mut aes_key, & aes_message);
 }
 
-fn encrypt(key: &[u8; 16], message: &[u8; 16]) {
-    let mut state = *message;
-    add_round_key(&key, 0);
+fn encrypt(key: &mut [u8; 16], message: &[u8; 16]) {
+    let mut state: [u8; 16] = *message;
+    println!("Original message: {:02x?}", state);
+    let mut current_key: [u8; 16] = *key;
+    add_round_key(&mut state, &current_key);
+    println!("Encrypted message: {:02x?}", state);
     for round in 1..=4 {
         byte_substitution(&mut state);
         shift_rows(&mut state);
         mix_columns(&mut state);
-        add_round_key(&key, &round);
+        current_key = generate_round_key(current_key, round);
+        add_round_key(&mut state, &current_key);
+        println!("Encrypted message: {:02x?}", state);
     }
-    println!("Encrypted message: {:02x?}", state);
 }
 
-fn add_round_key(state: &mut [u8; 16], key: &[u8; 16], round: &i32) {
-    let round_key: &mut [u32; 4] = generate_round_key(key, *round);
-    for i in 0..4 {
-        let round_key_bytes: [u8; 4] = round_key[i].to_be_bytes();
-        state[i * 4] ^= (round_key_bytes[i * 4]);
-        state[i * 4 + 1] ^= (round_key_bytes[i * 4 + 1]);
-        state[i * 4 + 2] ^= (round_key_bytes[i * 4 + 2]);
-        state[i * 4 + 3] ^= (round_key_bytes[i * 4 + 3]);
+fn add_round_key(state: &mut [u8; 16], key: &[u8; 16]) {
+    for i in 0..16 {
+        state[i] ^= key[i];
     }
+}
+
+fn generate_round_key(old_key: [u8; 16], round: i32) -> [u8; 16] {
+    let mut words: [u32; 4] = [0u32; 4];
+    for i in 0..4 {
+        words[i] = u32::from_be_bytes([
+            old_key[i * 4],
+            old_key[i * 4 + 1],
+            old_key[i * 4 + 2],
+            old_key[i * 4 + 3]
+        ]);
+    }
+
+    let mut new_words = [0u32; 4];
+    new_words[0] = words[0] ^ g_box(words[3], round);
+    new_words[1] = words[1] ^ new_words[0];
+    new_words[2] = words[2] ^ new_words[1];
+    new_words[3] = words[3] ^ new_words[2];
+
+    let mut new_key = [0u8; 16];
+    for i in 0..4 {
+        let bytes: [u8; _] = new_words[i].to_be_bytes();
+        new_key[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+    }
+    new_key
 }
 
 fn shift_rows(state: &mut [u8; 16]) {
@@ -43,47 +67,50 @@ fn byte_substitution(state: &mut [u8; 16]) {
     }
 }
 
-fn mix_columns(state: &mut [u8; 16]) {}
-
-fn generate_round_key(key: &mut [u8; 16], round: i32) -> [u32; 4] {
-    if round == 0 {
-        let mut round_key: [u32; 4] = [0; 4];
-        round_key[0] = u32::from_be_bytes([key[0], key[1], key[2], key[3]]);
-        round_key[1] = u32::from_be_bytes([key[4], key[5], key[6], key[7]]);
-        round_key[2] = u32::from_be_bytes([key[8], key[9], key[10], key[11]]);
-        round_key[3] = u32::from_be_bytes([key[12], key[13], key[14], key[15]]);
-        *key = round_key;
-    } else {
-        let mut round_key: [u32; 4] = [0; 4];
-        round_key[0] = key[0] ^ g_box(key[3], round);
-        round_key[1] = key[1] ^ round_key[0];
-        round_key[2] = key[2] ^ round_key[1];
-        round_key[3] = key[3] ^ round_key[2];
-        *key = round_key;
+fn mix_columns(state: &mut [u8; 16]) {
+    let mut new_state: [u8; 16] = [0u8; 16];
+    for i in 0..4 {
+        let col = &state[i*4..i*4+4];
+        new_state[i*4] = gf_mult(0x02, col[0]) ^ gf_mult(0x03, col[1]) ^ col[2] ^ col[3];
+        new_state[i*4 + 1] = col[0] ^ gf_mult(0x02, col[1]) ^ gf_mult(0x03, col[2]) ^ col[3];
+        new_state[i*4 + 2] = col[0] ^ col[1] ^ gf_mult(0x02, col[2]) ^ gf_mult(0x03, col[3]);
+        new_state[i*4 + 3] = gf_mult(0x03, col[0]) ^ col[1] ^ col[2] ^ gf_mult(0x02, col[3]);
     }
+    *state = new_state;
 }
 
+fn gf_mult(a: u8, b: u8) -> u8 {
+    let mut result: u8 = 0;
+    let mut temp_a = a;
+    let mut temp_b = b;
+    for _ in 0..8 {
+        if (temp_b & 1) != 0 {
+            result ^= temp_a;
+        }
+        let high_bit = temp_a & 0x80;
+        temp_a <<= 1;
+        if high_bit != 0 {
+            temp_a ^= 0x1b; // x^8 + x^4 + x^3 + x + 1
+        }
+        temp_b >>= 1;
+    }
+    result
+}
+
+
+
 fn g_box(word: u32, round: i32) -> u32 {
-    let word_bytes: [u8; 4] = word.to_be_bytes();
+    let mut word_bytes: [u8; 4] = word.to_be_bytes();
     //rotate left
     word_bytes = [word_bytes[1], word_bytes[2], word_bytes[3], word_bytes[0]];
     //substitute bytes
-    let substituted_word: [u8; 4] = sub_word(&mut word_bytes);
-    //xor with round constant
-    let round_constant: u8 = match round {
-        1 => 0x01,
-        2 => 0x02,
-        3 => 0x04,
-        4 => 0x08
-    };
-    substituted_word[0] ^= round_constant;
-    u32::from_be_bytes(substituted_word)
-}
-
-fn sub_word(word: &mut [u8; 4]) {
     for i in 0..4 {
-        word[i] = SBOX[word[i] as usize];
+        word_bytes[i] = SBOX[word_bytes[i] as usize];
     }
+    //XOR with round constant
+    let round_constant: [u8; 5] = [0x00,0x01,0x02,0x04,0x08];
+    word_bytes[0] ^= round_constant[round as usize];
+    u32::from_be_bytes(word_bytes)
 }
 
 const SBOX: [u8; 256] = [
