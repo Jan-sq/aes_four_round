@@ -15,7 +15,7 @@ impl SquareAttacker {
             let state: [u8; 16] = base_message;
             let encrypted: [u8; 16] = EncryptionService::encrypt(key, &state);
             ciphertexts.push(encrypted);
-        }
+        } 
         SquareAttacker { ciphertexts }
     }
 
@@ -35,7 +35,7 @@ impl SquareAttacker {
     // byte_index is the index of the byte in the last round key we want to recover
     fn attack_byte(&self, byte_index: usize) -> Vec<u8> {
         let mut candidates: Vec<u8> = Vec::new();
-
+        
         // guessing the byte value for the byte at byte_index in round key 4
         for guess in 0..=255 {
             let mut sum: u8 = 0u8;
@@ -50,6 +50,12 @@ impl SquareAttacker {
         }
         candidates
     }
+
+    // pub fn calculate_main_key(&self, candidates: Vec<u8>) {
+    //     for candidate in candidates {
+    //         let recovered_key: u8 = recover_key_byte(candidate);
+    //     }
+    // }
 }
 
 const INV_S_BOX: [u8; 256] = [
