@@ -6,9 +6,10 @@ pub struct SquareAttacker {
 
 impl SquareAttacker {
     pub fn new(key: &mut [u8; 16]) -> Self {
-        let mut ciphertexts = Vec::new();
+        let mut ciphertexts: Vec<[u8; 16]> = Vec::new();
         let mut base_message: [u8; 16] = [0u8; 16];
 
+        // Generate 256 ciphertexts by varying the first byte of the plaintext
         for i in 0..=255 {
             base_message[0] = i as u8;
             let state: [u8; 16] = base_message;
@@ -18,14 +19,29 @@ impl SquareAttacker {
         SquareAttacker { ciphertexts }
     }
 
-    pub fn attack_byte(&self, byte_index: usize) -> Vec<u8> {
-        let mut candidates = Vec::new();
+    pub fn execute_full_attack(&self) {
+        let mut round_key_4: [u8; 16] = [0u8; 16];
+        for i in 0..16 {
+            let candidates = self.attack_byte(i);
+            if candidates.len() == 1 {
+                round_key_4[i] = candidates[0];
+                println!("Recovered byte {} of round key 4: {:02x}", i, round_key_4[i]);
+            } else {
+                println!("Multiple candidates for byte {}...", i);
+            }
+        }
+    }
 
+    // byte_index is the index of the byte in the last round key we want to recover
+    fn attack_byte(&self, byte_index: usize) -> Vec<u8> {
+        let mut candidates: Vec<u8> = Vec::new();
+
+        // guessing the byte value for the byte at byte_index in round key 4
         for guess in 0..=255 {
             let mut sum: u8 = 0u8;
             for ct in &self.ciphertexts {
-                let intermediate = ct[byte_index] ^ guess as u8;
-                let decrypted_byte = INV_S_BOX[intermediate as usize];
+                let intermediate: u8 = ct[byte_index] ^ guess as u8;
+                let decrypted_byte: u8 = INV_S_BOX[intermediate as usize];
                 sum ^= decrypted_byte;
             }
             if sum == 0 {

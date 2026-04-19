@@ -3,7 +3,6 @@ pub struct EncryptionService;
 impl EncryptionService {
     pub fn encrypt(key: &mut [u8; 16], message: &[u8; 16]) -> [u8; 16] {
         let mut state: [u8; 16] = *message;
-        println!("Original message: {:02x?}", state);
         let mut current_key: [u8; 16] = *key;
         Self::add_round_key(&mut state, &current_key);
         // Rounds 1 to 3
@@ -18,6 +17,7 @@ impl EncryptionService {
         Self::byte_substitution(&mut state);
         Self::shift_rows(&mut state);
         current_key = Self::generate_round_key(current_key, 4);
+        println!("Round key 4: {:02x?}", current_key);
         Self::add_round_key(&mut state, &current_key);
         state
     }
@@ -72,24 +72,28 @@ impl EncryptionService {
     fn mix_columns(state: &mut [u8; 16]) {
         let mut new_state: [u8; 16] = [0u8; 16];
         for i in 0..4 {
-            let col = &state[i*4..i*4+4];
-            new_state[i*4] = Self::gf_mult(0x02, col[0]) ^ Self::gf_mult(0x03, col[1]) ^ col[2] ^ col[3];
-            new_state[i*4 + 1] = col[0] ^ Self::gf_mult(0x02, col[1]) ^ Self::gf_mult(0x03, col[2]) ^ col[3];
-            new_state[i*4 + 2] = col[0] ^ col[1] ^ Self::gf_mult(0x02, col[2]) ^ Self::gf_mult(0x03, col[3]);
-            new_state[i*4 + 3] = Self::gf_mult(0x03, col[0]) ^ col[1] ^ col[2] ^ Self::gf_mult(0x02, col[3]);
+            let col0 = state[i];
+            let col1 = state[i + 4];
+            let col2 = state[i + 8];
+            let col3 = state[i + 12];
+
+            new_state[i] = Self::gf_mult(0x02, col0) ^ Self::gf_mult(0x03, col1) ^ col2 ^ col3;
+            new_state[i + 4] = col0 ^ Self::gf_mult(0x02, col1) ^ Self::gf_mult(0x03, col2) ^ col3;
+            new_state[i + 8] = col0 ^ col1 ^ Self::gf_mult(0x02, col2) ^ Self::gf_mult(0x03, col3);
+            new_state[i + 12] = Self::gf_mult(0x03, col0) ^ col1 ^ col2 ^ Self::gf_mult(0x02, col3);
         }
         *state = new_state;
     }
 
     fn gf_mult(a: u8, b: u8) -> u8 {
         let mut result: u8 = 0;
-        let mut temp_a = a;
-        let mut temp_b = b;
+        let mut temp_a: u8 = a;
+        let mut temp_b: u8 = b;
         for _ in 0..8 {
             if (temp_b & 1) != 0 {
                 result ^= temp_a;
             }
-            let high_bit = temp_a & 0x80;
+            let high_bit: u8 = temp_a & 0x80;
             temp_a <<= 1;
             if high_bit != 0 {
                 temp_a ^= 0x1b; // x^8 + x^4 + x^3 + x + 1
@@ -98,8 +102,6 @@ impl EncryptionService {
         }
         result
     }
-
-
 
     fn g_box(word: u32, round: i32) -> u32 {
         let mut word_bytes: [u8; 4] = word.to_be_bytes();
