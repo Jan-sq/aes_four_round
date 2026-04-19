@@ -38,7 +38,7 @@ The Square Attack exploits the byte-oriented structure of AES. At only 4 rounds,
 Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
 
 ### Execution
-When running the program, you will be prompted to provide a **128-bit key as a string** (16 characters or a hex representation, depending on your specific implementation).
+When running the program, you will (not yet) be prompted to provide a **128-bit key as a string** (16 characters).
 
 ```bash
 # Build the project
